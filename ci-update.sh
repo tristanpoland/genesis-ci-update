@@ -1,5 +1,5 @@
 #!/bin/bash
-# Originally Written By Tristan J. Poland 2024
+
 
 
 set -euo pipefail
@@ -19,9 +19,12 @@ FILES_TO_COPY=(
     "repipe"
 )
 
-# Directories to preserve (not to be deleted during update)
-DIRS_TO_PRESERVE=(
+# Patterns of directories and files to preserve (not to be deleted or overwritten during update)
+PRESERVE_PATTERNS=(
     "pipeline/custom-*"
+    "pipeline/*custom*"
+    "scripts/*custom*"
+    "tasks/*custom*"
 )
 
 # Function to display usage information
@@ -58,10 +61,21 @@ mkdir -p "$TARGET_CI_PATH"
 safe_remove_contents() {
     local dir="$1"
     local exclude_pattern=""
-    for pattern in "${DIRS_TO_PRESERVE[@]}"; do
-        exclude_pattern="$exclude_pattern ! -name '$pattern'"
+    for pattern in "${PRESERVE_PATTERNS[@]}"; do
+        exclude_pattern="$exclude_pattern ! -path '*/$pattern'"
     done
-    find "$dir" -mindepth 1 -maxdepth 1 $exclude_pattern -exec rm -rf {} +
+    find "$dir" -mindepth 1 $exclude_pattern -delete
+}
+
+# Function to safely copy files, skipping preserved files
+safe_copy() {
+    local src="$1"
+    local dest="$2"
+    local exclude_pattern=""
+    for pattern in "${PRESERVE_PATTERNS[@]}"; do
+        exclude_pattern="$exclude_pattern ! -path '*/$pattern'"
+    done
+    rsync -a --exclude-from=<(printf "%s\n" "${PRESERVE_PATTERNS[@]}") "$src" "$dest"
 }
 
 # Update specified directories
@@ -70,14 +84,25 @@ for dir in "${DIRS_TO_UPDATE[@]}"; do
     target_dir="$TARGET_CI_PATH/$dir"
     mkdir -p "$target_dir"
     safe_remove_contents "$target_dir"
-    cp -R "$TEMPLATE_CI_PATH/$dir"/* "$target_dir/" 2>/dev/null || true
+    safe_copy "$TEMPLATE_CI_PATH/$dir/" "$target_dir/"
 done
 
 # Copy specified files from base template to target
 echo "Copying base template files..."
 for file in "${FILES_TO_COPY[@]}"; do
     if [ -f "$TEMPLATE_CI_PATH/$file" ]; then
-        cp "$TEMPLATE_CI_PATH/$file" "$TARGET_CI_PATH/"
+        should_copy=true
+        for pattern in "${PRESERVE_PATTERNS[@]}"; do
+            if [[ "$file" == $pattern ]]; then
+                should_copy=false
+                break
+            fi
+        done
+        if $should_copy; then
+            cp "$TEMPLATE_CI_PATH/$file" "$TARGET_CI_PATH/"
+        else
+            echo "Skipping preserved file: $file"
+        fi
     fi
 done
 
