@@ -27,6 +27,9 @@ PRESERVE_PATTERNS=(
     "tasks/*custom*"
 )
 
+# Name of the template reference file
+TEMPLATE_REF_FILE="template-ref"
+
 # Function to display usage information
 usage() {
     echo "Usage: $0 <template_path> <target_path> [ci_directory_name]"
@@ -71,10 +74,6 @@ safe_remove_contents() {
 safe_copy() {
     local src="$1"
     local dest="$2"
-    local exclude_pattern=""
-    for pattern in "${PRESERVE_PATTERNS[@]}"; do
-        exclude_pattern="$exclude_pattern ! -path '*/$pattern'"
-    done
     rsync -a --exclude-from=<(printf "%s\n" "${PRESERVE_PATTERNS[@]}") "$src" "$dest"
 }
 
@@ -106,6 +105,11 @@ for file in "${FILES_TO_COPY[@]}"; do
     fi
 done
 
+# Create template reference file
+echo "Creating template reference file..."
+template_hash=$(find "$TEMPLATE_CI_PATH" -type f ! -path "*/.git/*" -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
+echo "$template_hash" > "$TARGET_CI_PATH/$TEMPLATE_REF_FILE"
+
 echo "CI update completed successfully."
 
 # Function to compare directories and list potentially removed files
@@ -128,5 +132,20 @@ compare_directories "$TEMPLATE_CI_PATH" "$TARGET_CI_PATH" "$CI_DIR/"
 for dir in "${DIRS_TO_UPDATE[@]}"; do
     compare_directories "$TEMPLATE_CI_PATH/$dir" "$TARGET_CI_PATH/$dir" "$CI_DIR/$dir/"
 done
+
+# Check if template has changed
+if [ -f "$TARGET_CI_PATH/$TEMPLATE_REF_FILE.old" ]; then
+    old_hash=$(cat "$TARGET_CI_PATH/$TEMPLATE_REF_FILE.old")
+    if [ "$old_hash" != "$template_hash" ]; then
+        echo "Template has changed. New hash: $template_hash"
+        echo "Old hash: $old_hash"
+        echo "You may want to review changes and clean up any obsolete files."
+    else
+        echo "Template has not changed since last update."
+    fi
+fi
+
+# Update the old reference file
+mv "$TARGET_CI_PATH/$TEMPLATE_REF_FILE" "$TARGET_CI_PATH/$TEMPLATE_REF_FILE.old"
 
 echo "CI update process completed."
