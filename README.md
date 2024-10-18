@@ -85,4 +85,4 @@ Contributions to improve `genesis-ci-update` are welcome. Please feel free to su
 
 ## License
 
-[Specify the license here, e.g., MIT, Apache 2.0, etc.]
+Apache 2.0
