@@ -23,8 +23,8 @@ FILES_TO_COPY=(
 PRESERVE_PATTERNS=(
     "pipeline/custom-*"
     "pipeline/*custom*"
-    "scripts/*custom*"
-    "tasks/*custom*"
+    "scripts/*"
+    "tasks/*"
 )
 
 # Name of the template reference file
